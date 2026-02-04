@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 logger.debug("Environment variables loaded from .env file")
 
-DB_USER = os.getenv("DB_USER", "username")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "macro-analytics")
+DB_USER = os.getenv("DB_USER", "")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_HOST = os.getenv("DB_HOST", "")
+DB_PORT = os.getenv("DB_PORT", "")
+DB_NAME = os.getenv("DB_NAME", "")
 
 logger.debug(f"Database config: host={DB_HOST}, port={DB_PORT}, db={DB_NAME}, user={DB_USER}")
 
