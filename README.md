@@ -31,75 +31,93 @@ CREATE USER your_username WITH PASSWORD 'your_password';
 GRANT ALL PRIVILEGES ON DATABASE "macro-analytics" TO your_username;
 ```
 
-### 3. Update Database Configuration
+### 3. Configure Environment Variables
 
-Edit `database.py` and update the `DATABASE_URL` with your credentials:
-```python
-DATABASE_URL = "postgresql://username:password@localhost:5432/macro-analytics"
+Create a `.env` file in the project root:
+```env
+DB_USER=your_username
+DB_PASSWORD=your_password
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=macro-analytics
 ```
 
-Or use environment variables (recommended):
-- Copy `.env.example` to `.env`
-- Update the credentials in `.env`
-
-### 4. Define Your Transaction Schema
-
-**Important:** Update the following files with your actual transaction fields:
-
-1. **`models.py`** - Update the `Transaction` model:
-   - Add columns matching your data structure
-   - Example fields are commented out - uncomment and modify as needed
-
-2. **`schemas.py`** - Update the Pydantic schemas:
-   - Update `TransactionBase`, `TransactionCreate`, and `TransactionResponse`
-   - Match the fields you defined in your model
-
-### 5. Implement File Processing Logic
-
-Edit `apis.py` in the `upload_file` function:
-
-- Add your file parsing logic (CSV, JSON, Excel, etc.)
-- Map file data to Transaction model fields
-- The TODO comments guide you through the implementation
-
-Example for CSV:
-```python
-import csv
-csv_data = io.StringIO(contents.decode('utf-8'))
-reader = csv.DictReader(csv_data)
-
-for row in reader:
-    transaction = Transaction(
-        transaction_id=row['id'],
-        amount=float(row['amount']),
-        # ... map other fields
-        source_file=file.filename
-    )
-    db.add(transaction)
-
-db.commit()
-```
-
-### 6. Run the Application
+### 4. Run the Application
 
 ```bash
 # Using uvicorn directly
-uvicorn apis:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # Or using poetry
-poetry run uvicorn apis:app --reload
+poetry run uvicorn main:app --reload
 
 # Or run the Python file directly
-python apis.py
+python main.py
 ```
 
 The API will be available at: `http://localhost:8000`
+
+## Database Migrations with Alembic
+
+This project uses Alembic for database migrations. Alembic tracks changes to your SQLAlchemy models and applies them to the database.
+
+### Initial Setup (Already Done)
+
+The alembic configuration is already set up:
+- `alembic.ini` - Alembic configuration file
+- `alembic/env.py` - Environment configuration (reads database URL from `.env`)
+- `alembic/versions/` - Migration scripts
+
+### Creating a New Migration
+
+After modifying `models.py`, generate a migration:
+
+```bash
+# Auto-generate migration based on model changes
+alembic revision --autogenerate -m "describe your changes"
+```
+
+### Applying Migrations
+
+```bash
+# Apply all pending migrations
+alembic upgrade head
+
+# Apply migrations up to a specific revision
+alembic upgrade <revision_id>
+```
+
+### Reverting Migrations
+
+```bash
+# Downgrade by one revision
+alembic downgrade -1
+
+# Downgrade to a specific revision
+alembic downgrade <revision_id>
+
+# Downgrade all the way (empty database)
+alembic downgrade base
+```
+
+### Viewing Migration History
+
+```bash
+# Show current revision
+alembic current
+
+# Show migration history
+alembic history
+
+# Show detailed history
+alembic history --verbose
+```
 
 ## API Endpoints
 
 ### Core Endpoints
 
-- `POST /upload` - Upload and process file
+- `POST /upload` - Upload and process JSON file with transaction data
 
 ### Interactive API Documentation
 
@@ -115,63 +133,32 @@ FastAPI provides automatic interactive documentation:
 curl -X POST "http://localhost:8000/upload" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
-  -F "file=@your_file.csv"
-```
-
-### Get all transactions:
-```bash
-curl -X GET "http://localhost:8000/transactions"
-```
-
-### Get transaction by ID:
-```bash
-curl -X GET "http://localhost:8000/transactions/1"
+  -F "file=@your_file.json" \
+  -F "client_name=Your Client Name"
 ```
 
 ## Project Structure
 
 ```
 macro-analytics/
-├── apis.py           # Main FastAPI application
+├── main.py           # Main FastAPI application
 ├── database.py       # Database configuration and session management
 ├── models.py         # SQLAlchemy models (Transaction table)
 ├── schemas.py        # Pydantic schemas for validation
-├── .env.example      # Example environment variables
+├── alembic.ini       # Alembic configuration
+├── alembic/          # Alembic migrations directory
+│   ├── env.py        # Alembic environment (reads from .env)
+│   ├── script.py.mako
+│   └── versions/     # Migration scripts
+├── .env              # Environment variables (not in git)
 ├── pyproject.toml    # Poetry dependencies
 └── README.md         # This file
 ```
 
-## Next Steps (TODO)
-
-1. **Update Transaction Schema**
-   - Edit `models.py` to add your transaction fields
-   - Edit `schemas.py` to match your model
-
-2. **Implement File Processing**
-   - Edit the `upload_file` function in `apis.py`
-   - Add logic to parse your specific file format
-   - Map data to Transaction model
-
-3. **Add Custom Endpoints** (optional)
-   - Filter transactions by date range
-   - Get analytics/statistics
-   - Bulk operations
-   - Export functionality
-
-4. **Security Enhancements** (for production)
-   - Add authentication/authorization
-   - Implement rate limiting
-   - Add input validation
-   - Use environment variables for secrets
-
-5. **Error Handling**
-   - Add comprehensive error handling
-   - Implement logging
-   - Add data validation
-
 ## Development Tips
 
-- The database tables are created automatically on application startup
+- Database tables are created automatically on application startup if they don't exist
 - Use `--reload` flag during development for auto-reloading
+- Always use Alembic migrations when modifying models in production
 - Check the logs for database connection issues
 - Test your API using the Swagger UI at `/docs`

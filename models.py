@@ -16,32 +16,32 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
 
-    work_order_id = Column(String(100), index=True)
+    work_order_id = Column(String(255), index=True)
     client_name = Column(String(255))
 
     date = Column(DateTime)
     description = Column(Text)
     amount = Column(Float, nullable=False)
-    type = Column(String(50))
+    type = Column(String(255))
     balance = Column(Float)
     reference = Column(String(255))
     od_limit = Column(Float)
     charges = Column(Float)
 
-    category = Column(String(100))
-    category_2 = Column(String(100))
+    category = Column(String(255))
+    category_2 = Column(String(255))
 
-    mode = Column(String(50))
+    mode = Column(String(255))
 
-    masked_account_number = Column(String(50), nullable=True, index=True)
+    masked_account_number = Column(String(255), nullable=True, index=True)
     account_name = Column(String(255))
-    account_type = Column(String(50))
+    account_type = Column(String(255))
 
     bank_name = Column(String(255))
-    ifsc_code = Column(String(20))
-    micr_code = Column(String(20))
+    ifsc_code = Column(String(255))
+    micr_code = Column(String(255))
 
-    pincode = Column(String(10))
+    pincode = Column(String(255))
 
     entities = Column(Text)
 
