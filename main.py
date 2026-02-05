@@ -339,7 +339,7 @@ async def upload_file(
         if not all_transactions:
             logger.error("No transaction data found in the JSON structure")
             raise HTTPException(
-                status_code=400,
+                status_code=200,
                 detail="No transaction data found in the JSON structure",
             )
 
