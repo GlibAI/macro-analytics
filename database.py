@@ -11,7 +11,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -38,8 +38,10 @@ else:
 logger.debug("Creating SQLAlchemy engine...")
 engine = create_engine(
     DATABASE_URL,
-    echo=True,
+    echo=False,
     pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
 )
 logger.info("SQLAlchemy engine created successfully")
 

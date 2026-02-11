@@ -8,7 +8,6 @@ from sqlalchemy import insert
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
-import io
 import re
 from database import get_db, init_db
 from models import Transaction
@@ -107,42 +106,35 @@ def get_masked_account_number(db: Session, account_number: str) -> tuple[bool, s
     return False, masked_4_digits
 
 
-def is_duplicate_transaction(db: Session, txn: dict) -> bool:
+def get_existing_work_order_ids(db: Session, work_order_ids: list[str]) -> set[str]:
     """
-    Check if a transaction already exists in the database.
+    Check which work_order_ids already exist in the database.
 
     Args:
         db: Database session
-        txn: Transaction dictionary with date, amount, credit/debit, masked_account_number, description, reference
+        work_order_ids: List of work_order_ids to check
 
     Returns:
-        True if duplicate exists, False otherwise
+        Set of work_order_ids that already exist in the database
     """
-    logger.debug(f"Checking for duplicate transaction: date={txn.get('date')}, amount={txn.get('amount')}, type={txn.get('type')}")
-    query = db.query(Transaction)
+    if not work_order_ids:
+        return set()
 
-    if txn.get("date"):
-        query = query.filter(Transaction.date == txn.get("date"))
-    if txn.get("amount") is not None:
-        query = query.filter(Transaction.amount == txn.get("amount"))
-    if txn.get("balance") is not None:
-        query = query.filter(Transaction.balance == txn.get("balance"))
-    if txn.get("charges") is not None:
-        query = query.filter(Transaction.charges == txn.get("charges"))
-    if txn.get("type"):
-        query = query.filter(Transaction.type == txn.get("type"))
-    if txn.get("masked_account_number"):
-        query = query.filter(
-            Transaction.masked_account_number == txn.get("masked_account_number")
-        )
-    if txn.get("description"):
-        query = query.filter(Transaction.description == txn.get("description"))
-    if txn.get("reference"):
-        query = query.filter(Transaction.reference == txn.get("reference"))
+    unique_ids = list(set(wid for wid in work_order_ids if wid))
+    if not unique_ids:
+        return set()
 
-    is_dup = query.first() is not None
-    logger.debug(f"Duplicate check result: {is_dup}")
-    return is_dup
+    existing = (
+        db.query(Transaction.work_order_id)
+        .filter(Transaction.work_order_id.in_(unique_ids))
+        .distinct()
+        .all()
+    )
+    db.expire_all()
+
+    existing_set = {row[0] for row in existing}
+    logger.info(f"Found {len(existing_set)} existing work_order_ids out of {len(unique_ids)} checked")
+    return existing_set
 
 
 @app.post("/upload", response_model=FileUploadResponse)
@@ -193,6 +185,7 @@ async def upload_file(
         try:
             logger.debug("Parsing JSON contents...")
             data = json.loads(contents.decode("utf-8"))
+            del contents
             logger.debug("JSON parsed successfully")
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
@@ -343,7 +336,10 @@ async def upload_file(
                 detail="No transaction data found in the JSON structure",
             )
 
-        logger.info(f"Total transactions extracted: {len(all_transactions)}")
+        del data
+
+        total_transactions = len(all_transactions)
+        logger.info(f"Total transactions extracted: {total_transactions}")
 
         processed_transactions = []
         errors = []
@@ -355,45 +351,46 @@ async def upload_file(
         first_masked_account = mask_account_number(
             first_account_number, exists_in_db=False
         )
-        logger.debug(f"First masked account number: {first_masked_account}")
 
-        logger.debug("Starting transaction processing and duplicate checking...")
-        for idx, row in enumerate(all_transactions):
-            try:
-                transaction_date = None
-                if row.get("date"):
-                    try:
-                        transaction_date = datetime.fromisoformat(
-                            row.get("date").replace("Z", "+00:00")
-                        )
-                    except:
+        # Single query: check which work_order_ids already exist
+        incoming_work_order_ids = [txn.get("work_order_id") for txn in all_transactions]
+        existing_work_order_ids = get_existing_work_order_ids(db, incoming_work_order_ids)
+
+        if work_order_id and work_order_id in existing_work_order_ids:
+            duplicates_skipped = len(all_transactions)
+            logger.info(f"Work order {work_order_id} already exists in DB. Skipping all {duplicates_skipped} transactions.")
+        else:
+            for idx, row in enumerate(all_transactions):
+                try:
+                    transaction_date = None
+                    if row.get("date"):
                         try:
-                            transaction_date = datetime.strptime(
-                                row.get("date"), "%d/%m/%Y"
+                            transaction_date = datetime.fromisoformat(
+                                row.get("date").replace("Z", "+00:00")
                             )
                         except:
-                            pass
+                            try:
+                                transaction_date = datetime.strptime(
+                                    row.get("date"), "%d/%m/%Y"
+                                )
+                            except:
+                                pass
 
-                row["date"] = transaction_date
+                    row["date"] = transaction_date
+                    row["masked_account_number"] = first_masked_account
 
-                row["masked_account_number"] = first_masked_account
+                    row.pop("account_number", None)
+                    row.pop("account_address", None)
 
-                is_dup = is_duplicate_transaction(db, row)
+                    processed_transactions.append(row)
 
-                if is_dup:
-                    duplicates_skipped += 1
+                except Exception as e:
+                    error_msg = f"Error processing record {idx + 1}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
                     continue
 
-                row.pop("account_number", None)
-                row.pop("account_address", None)
-
-                processed_transactions.append(row)
-
-            except Exception as e:
-                error_msg = f"Error processing record {idx + 1}: {str(e)}"
-                logger.error(error_msg)
-                errors.append(error_msg)
-                continue
+        del all_transactions
 
         logger.info(f"Processing complete: {len(processed_transactions)} to save, {duplicates_skipped} duplicates skipped, {len(errors)} errors")
 
@@ -419,7 +416,7 @@ async def upload_file(
         return FileUploadResponse(
             filename=file.filename,
             message=message,
-            records_processed=len(all_transactions),
+            records_processed=total_transactions,
             records_saved=records_saved,
         )
 
@@ -437,4 +434,4 @@ async def upload_file(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=1234)
