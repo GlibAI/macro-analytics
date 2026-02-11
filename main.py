@@ -2,6 +2,7 @@
 FastAPI application for file upload and transaction processing
 """
 
+import gc
 import logging
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, Form
 from sqlalchemy import insert
@@ -12,6 +13,8 @@ import re
 from database import get_db, init_db
 from models import Transaction
 from schemas import FileUploadResponse
+
+INSERT_BATCH_SIZE = 500
 
 logger = logging.getLogger(__name__)
 
@@ -395,12 +398,16 @@ async def upload_file(
         logger.info(f"Processing complete: {len(processed_transactions)} to save, {duplicates_skipped} duplicates skipped, {len(errors)} errors")
 
         try:
+            records_saved = 0
             if processed_transactions:
-                logger.debug(f"Inserting {len(processed_transactions)} transactions into database...")
-                db.execute(insert(Transaction).values(processed_transactions))
-                db.commit()
-                logger.info("Database commit successful")
-            records_saved = len(processed_transactions)
+                for i in range(0, len(processed_transactions), INSERT_BATCH_SIZE):
+                    batch = processed_transactions[i : i + INSERT_BATCH_SIZE]
+                    db.execute(insert(Transaction).values(batch))
+                    db.commit()
+                    records_saved += len(batch)
+                    db.expire_all()
+                logger.info(f"Database commit successful: {records_saved} records in batches of {INSERT_BATCH_SIZE}")
+            del processed_transactions
         except Exception as e:
             logger.error(f"Database error: {str(e)}")
             db.rollback()
@@ -427,11 +434,17 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
     finally:
-        logger.debug("Closing uploaded file")
         await file.close()
+        gc.collect()
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        workers=2,
+        limit_max_requests=1000,
+    )
