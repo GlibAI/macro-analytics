@@ -17,6 +17,7 @@ pydantic-settings = "^2.7.1"
 python-dotenv = "^1.0.1"
 logging = "^0.4.9.6"
 alembic = "^1.18.3"
+boto3 = "^1.42.51"
 
 
 [build-system]

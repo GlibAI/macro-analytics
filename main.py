@@ -5,7 +5,9 @@ FastAPI application for file upload and transaction processing
 import gc
 import logging
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, Form
-from sqlalchemy import insert
+from sqlalchemy import insert, text
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
@@ -13,6 +15,13 @@ import re
 from database import get_db, init_db
 from models import Transaction
 from schemas import FileUploadResponse
+import os
+import boto3
+from pathlib import Path
+from dotenv import load_dotenv
+from pydantic import BaseModel
+
+load_dotenv()
 
 INSERT_BATCH_SIZE = 500
 
@@ -23,6 +32,48 @@ app = FastAPI(
     description="API for processing files and storing transaction data",
     version="1.0.0",
 )
+
+# Serve static files
+static_dir = Path(__file__).parent / "static"
+static_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+class GeneralBedrockModel(BaseModel):
+    model_id: str = os.getenv(
+        "BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0"
+    )
+    max_output_tokens: int = 4096
+    user_prompt: str
+
+    async def call_api(self, messages, inference_config):
+        session = boto3.Session()
+        bedrock_runtime = session.client(service_name="bedrock-runtime")
+
+        converse_params = {
+            "modelId": self.model_id,
+            "messages": messages,
+            "inferenceConfig": inference_config,
+        }
+
+        response = bedrock_runtime.converse(**converse_params)
+
+        return response["output"]["message"]["content"][0]["text"]
+
+    async def __call__(self, *args, **kwargs):
+        # prepare inference config
+        inference_config = {
+            "maxTokens": self.max_output_tokens,
+        }
+
+        messages = [{"role": "user", "content": [{"text": self.user_prompt}]}]
+
+        # call api
+        response = await self.call_api(
+            messages=messages, inference_config=inference_config
+        )
+
+        return response
 
 
 @app.on_event("startup")
@@ -61,7 +112,9 @@ def mask_account_number(account_number, exists_in_db=False):
         return account_number
 
     if len(account_number) <= 4:
-        logger.debug(f"Account number too short ({len(account_number)} chars), returning as-is")
+        logger.debug(
+            f"Account number too short ({len(account_number)} chars), returning as-is"
+        )
         return account_number
 
     digits_to_show = 5 if exists_in_db else 4
@@ -136,8 +189,131 @@ def get_existing_work_order_ids(db: Session, work_order_ids: list[str]) -> set[s
     db.expire_all()
 
     existing_set = {row[0] for row in existing}
-    logger.info(f"Found {len(existing_set)} existing work_order_ids out of {len(unique_ids)} checked")
+    logger.info(
+        f"Found {len(existing_set)} existing work_order_ids out of {len(unique_ids)} checked"
+    )
     return existing_set
+
+
+@app.get("/")
+async def serve_query_page():
+    """Serve the main query interface page"""
+    return FileResponse(static_dir / "query.html")
+
+
+@app.post("/query")
+async def query_data(
+    natural_query: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Convert a natural language query to SQL and execute it.
+
+    Args:
+        natural_query: The natural language query from the user
+        db: Database session (injected)
+
+    Returns:
+        Query results in JSON format
+    """
+    try:
+        if not natural_query or len(natural_query.strip()) == 0:
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+        logger.info(f"Processing natural language query: {natural_query[:100]}")
+
+        # Get database schema information for the prompt
+        schema_info = """
+                        Database Table: transactions
+                        Columns:
+                        - id (Integer, Primary Key)
+                        - work_order_id (String)
+                        - client_name (String)
+                        - date (DateTime)
+                        - description (Text)
+                        - amount (Float)
+                        - type (String) - credit/debit type
+                        - balance (Float)
+                        - reference (String)
+                        - od_limit (Float)
+                        - charges (Float)
+                        - category (String)
+                        - category_2 (String)
+                        - mode (String)
+                        - masked_account_number (String)
+                        - account_name (String)
+                        - account_type (String)
+                        - bank_name (String)
+                        - ifsc_code (String)
+                        - micr_code (String)
+                        - pincode (String)
+                        - entities (Text)
+                        - created_at (DateTime)
+                        - updated_at (DateTime)
+
+                        IMPORTANT: Always return valid PostgreSQL syntax only. Do not include explanations or markdown code blocks.
+                    """
+
+        # Create prompt for LLM
+        prompt = f"""Convert the following natural language query to a PostgreSQL SELECT query.
+
+                    Schema:
+                    {schema_info}
+
+                    Natural Language Query: "{natural_query}"
+
+                    Return ONLY the PostgreSQL query, nothing else. No explanations, no markdown, just the SQL query.
+                
+                """
+
+        # Get SQL from LLM
+        sql_query = await GeneralBedrockModel(user_prompt=prompt)()
+        sql_query = sql_query.strip()
+
+        # Remove markdown code blocks if present
+        if sql_query.startswith("```"):
+            sql_query = sql_query.split("```")[1]
+            if sql_query.startswith("sql"):
+                sql_query = sql_query[3:]
+            sql_query = sql_query.strip()
+
+        logger.info(f"Generated SQL: {sql_query}")
+
+        # Execute the query with safety checks
+        if not sql_query.lower().startswith("select"):
+            raise HTTPException(
+                status_code=400, detail="Only SELECT queries are allowed"
+            )
+
+        # Execute query
+        result = db.execute(text(sql_query))
+        rows = result.fetchall()
+
+        # Convert rows to dictionaries
+        columns = result.keys()
+        data = [dict(zip(columns, row)) for row in rows]
+
+        # Convert datetime objects to ISO format strings
+        for row in data:
+            for key, value in row.items():
+                if isinstance(value, datetime):
+                    row[key] = value.isoformat()
+
+        logger.info(f"Query executed successfully, returned {len(data)} rows")
+
+        return {
+            "success": True,
+            "query": natural_query,
+            "sql": sql_query,
+            "rows_returned": len(data),
+            "data": data,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Query execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Query execution failed: {str(e)}")
 
 
 @app.post("/upload", response_model=FileUploadResponse)
@@ -164,7 +340,9 @@ async def upload_file(
         FileUploadResponse with processing results
     """
     try:
-        logger.info(f"Upload request received: filename={file.filename if file else None}, client_name={client_name}")
+        logger.info(
+            f"Upload request received: filename={file.filename if file else None}, client_name={client_name}"
+        )
 
         if not file:
             logger.error("No file uploaded")
@@ -201,7 +379,9 @@ async def upload_file(
 
         xns_data = data.get("Xns")
         metadata = data.get("MetaData")
-        logger.debug(f"Xns data type: {type(xns_data).__name__}, MetaData present: {metadata is not None}")
+        logger.debug(
+            f"Xns data type: {type(xns_data).__name__}, MetaData present: {metadata is not None}"
+        )
         if not xns_data:
             logger.error("Required key 'Xns' not found in JSON file")
             raise HTTPException(
@@ -254,7 +434,9 @@ async def upload_file(
                         ),
                     }
                     all_transactions.append(txn)
-                logger.debug(f"Extracted {len(all_transactions)} transactions from dict format")
+                logger.debug(
+                    f"Extracted {len(all_transactions)} transactions from dict format"
+                )
             except Exception as e:
                 logger.error(f"Error extracting transactions from dict: {str(e)}")
 
@@ -322,9 +504,13 @@ async def upload_file(
                                     all_transactions.append(txn)
                             id += 1
                 except Exception as e:
-                    logger.error(f"Error extracting transactions from list item: {str(e)}")
+                    logger.error(
+                        f"Error extracting transactions from list item: {str(e)}"
+                    )
 
-            logger.debug(f"Extracted {len(all_transactions)} transactions from list format")
+            logger.debug(
+                f"Extracted {len(all_transactions)} transactions from list format"
+            )
 
         else:
             raise HTTPException(
@@ -357,11 +543,15 @@ async def upload_file(
 
         # Single query: check which work_order_ids already exist
         incoming_work_order_ids = [txn.get("work_order_id") for txn in all_transactions]
-        existing_work_order_ids = get_existing_work_order_ids(db, incoming_work_order_ids)
+        existing_work_order_ids = get_existing_work_order_ids(
+            db, incoming_work_order_ids
+        )
 
         if work_order_id and work_order_id in existing_work_order_ids:
             duplicates_skipped = len(all_transactions)
-            logger.info(f"Work order {work_order_id} already exists in DB. Skipping all {duplicates_skipped} transactions.")
+            logger.info(
+                f"Work order {work_order_id} already exists in DB. Skipping all {duplicates_skipped} transactions."
+            )
         else:
             for idx, row in enumerate(all_transactions):
                 try:
@@ -395,7 +585,9 @@ async def upload_file(
 
         del all_transactions
 
-        logger.info(f"Processing complete: {len(processed_transactions)} to save, {duplicates_skipped} duplicates skipped, {len(errors)} errors")
+        logger.info(
+            f"Processing complete: {len(processed_transactions)} to save, {duplicates_skipped} duplicates skipped, {len(errors)} errors"
+        )
 
         try:
             records_saved = 0
@@ -406,7 +598,9 @@ async def upload_file(
                     db.commit()
                     records_saved += len(batch)
                     db.expire_all()
-                logger.info(f"Database commit successful: {records_saved} records in batches of {INSERT_BATCH_SIZE}")
+                logger.info(
+                    f"Database commit successful: {records_saved} records in batches of {INSERT_BATCH_SIZE}"
+                )
             del processed_transactions
         except Exception as e:
             logger.error(f"Database error: {str(e)}")
@@ -441,10 +635,17 @@ async def upload_file(
 if __name__ == "__main__":
     import uvicorn
 
+    HOST = os.getenv("HOST", "0.0.0.0")
+    PORT = int(os.getenv("PORT", "8000"))
+    RELOAD = os.getenv("RELOAD", "true").lower() == "true"
+    WORKERS = int(os.getenv("WORKERS", "1" if RELOAD else "2"))
+    LIMIT_MAX_REQUESTS = int(os.getenv("LIMIT_MAX_REQUESTS", "1000"))
+
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
-        port=8000,
-        workers=2,
-        limit_max_requests=1000,
+        host=HOST,
+        port=PORT,
+        reload=RELOAD,
+        workers=WORKERS,
+        limit_max_requests=LIMIT_MAX_REQUESTS,
     )

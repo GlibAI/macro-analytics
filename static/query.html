@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Macro Analytics - Query Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+        }
+
+        .main-layout {
+            display: flex;
+            height: 100vh;
+            gap: 0;
+        }
+
+        /* LEFT SIDEBAR - SCHEMA DOCUMENTATION */
+        .sidebar {
+            width: 50%;
+            background: white;
+            overflow-y: auto;
+            padding: 0;
+            position: relative;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.15);
+        }
+
+        .sidebar-content {
+            padding: 30px;
+        }
+
+        .sidebar h1 {
+            color: #0257fd;
+            font-size: 1.8em;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .sidebar h2 {
+            color: #0257fd;
+            margin: 25px 0 20px 0;
+            font-size: 1.5em;
+            border-bottom: 2px solid #0257fd;
+            padding-bottom: 10px;
+        }
+
+        .sidebar h3 {
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            font-size: 1.1em;
+        }
+
+        .sidebar h4 {
+            color: #0257fd;
+            margin-bottom: 8px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .sidebar p {
+            line-height: 1.6;
+            margin-bottom: 12px;
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .card {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .schema-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 0.85em;
+        }
+
+        .schema-table thead {
+            background: #0257fd;
+            color: white;
+        }
+
+        .schema-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .schema-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .schema-table tbody tr:hover {
+            background: #f5f5f5;
+        }
+
+        .column-name {
+            font-weight: 600;
+            color: #0257fd;
+            font-family: 'Courier New', monospace;
+        }
+
+        .column-type {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #d63031;
+        }
+
+        .column-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+            margin: 15px 0;
+        }
+
+        .column-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 3px solid #0257fd;
+            border: 1px solid #e0e0e0;
+        }
+
+        .column-card h4 {
+            color: #0257fd;
+            margin-bottom: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95em;
+        }
+
+        .column-card .type {
+            display: inline-block;
+            background: #0257fd;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75em;
+            margin-bottom: 8px;
+        }
+
+        .column-card p {
+            font-size: 0.9em;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .example-section {
+            background: white;
+            padding: 15px;
+            border-left: 4px solid #0257fd;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #e0e0e0;
+        }
+
+        .example-section h4 {
+            color: #0257fd;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .example-query {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #333;
+            font-size: 0.85em;
+            border: 1px solid #e0e0e0;
+        }
+
+        .tip {
+            background: #e7f5e7;
+            border-left: 4px solid #2d7a2d;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 12px 0;
+            color: #2d7a2d;
+            font-size: 0.95em;
+            line-height: 1.5;
+        }
+
+        .tip strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .tip ul {
+            margin-left: 20px;
+            margin-top: 8px;
+        }
+
+        .tip li {
+            margin-bottom: 5px;
+        }
+
+        .warning {
+            background: #ffe0e0;
+            border-left: 4px solid #c92a2a;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 12px 0;
+            color: #c92a2a;
+            font-size: 0.95em;
+        }
+
+        .warning strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        /* RIGHT SIDE - QUERY INTERFACE */
+        .main-content {
+            width: 50%;
+            display: flex;
+            flex-direction: column;
+            padding: 30px;
+            overflow-y: auto;
+            background: linear-gradient(135deg, #0257fd 0%, #0148c4 100%);
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            animation: slideDown 0.6s ease-out;
+        }
+
+        header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        header p {
+            font-size: 1em;
+            opacity: 0.95;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 35px;
+            flex: 1;
+            animation: fadeIn 0.6s ease-out;
+            overflow-y: auto;
+        }
+
+        .input-section {
+            margin-bottom: 25px;
+        }
+
+        .input-section label {
+            display: block;
+            font-size: 1.05em;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.95em;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #0257fd;
+            box-shadow: 0 0 0 3px rgba(2, 87, 253, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 25px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 0.95em;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #0257fd 0%, #0148c4 100%);
+            color: white;
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(2, 87, 253, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-clear {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-clear:hover {
+            background: #ff5252;
+        }
+
+        .btn-copy {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .btn-copy:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn-copy:active {
+            transform: translateY(0);
+        }
+
+        .btn-export {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .btn-export:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(39, 174, 96, 0.3);
+        }
+
+        .btn-export:active {
+            transform: translateY(0);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #0257fd;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0257fd;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #ffe0e0;
+            color: #c92a2a;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #c92a2a;
+            display: none;
+            font-size: 0.95em;
+        }
+
+        .success-message {
+            background: #e7f5e7;
+            color: #2d7a2d;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #2d7a2d;
+            display: none;
+            font-size: 0.95em;
+        }
+
+        .query-info {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #0257fd;
+            display: none;
+        }
+
+        .query-info h3 {
+            color: #0257fd;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .query-info pre {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 1em;
+            color: #333;
+            border: 1px solid #e0e0e0;
+        }
+
+        .results-section {
+            margin-top: 25px;
+            display: none;
+        }
+
+        .results-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .results-stats {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .results-stats strong {
+            color: #0257fd;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            font-size: 0.9em;
+        }
+
+        table thead {
+            background: #f5f5f5;
+            position: sticky;
+            top: 0;
+        }
+
+        table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #0257fd;
+        }
+
+        table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e0e0e0;
+            color: #666;
+        }
+
+        table tbody tr:hover {
+            background: #f9f9f9;
+        }
+
+        table tbody tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #999;
+            padding: 25px;
+        }
+
+        .example-list {
+            list-style: none;
+        }
+
+        .example-list li {
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 3px solid #0257fd;
+            font-size: 0.9em;
+            color: #333;
+            line-height: 1.4;
+        }
+
+        .example-list li:hover {
+            background: #eff5ff;
+            padding-left: 18px;
+            box-shadow: 0 2px 8px rgba(2, 87, 253, 0.1);
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* SCROLLBAR STYLING */
+        .sidebar::-webkit-scrollbar,
+        .main-card::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .sidebar::-webkit-scrollbar-track,
+        .main-card::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb,
+        .main-card::-webkit-scrollbar-thumb {
+            background: #0257fd;
+            border-radius: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover,
+        .main-card::-webkit-scrollbar-thumb:hover {
+            background: #0148c4;
+        }
+
+        /* RESPONSIVE DESIGN */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 55%;
+            }
+
+            .main-content {
+                width: 45%;
+                padding: 20px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-layout {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                max-height: 45vh;
+                border-bottom: 2px solid #0257fd;
+            }
+
+            .main-content {
+                width: 100%;
+                padding: 20px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar-content {
+                padding: 15px;
+            }
+
+            .main-content {
+                padding: 15px;
+            }
+
+            .main-card {
+                padding: 15px;
+            }
+
+            header h1 {
+                font-size: 1.6em;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .sidebar h1,
+            .sidebar h2 {
+                font-size: 1.2em;
+            }
+
+            table {
+                font-size: 0.8em;
+            }
+
+            table th,
+            table td {
+                padding: 8px;
+            }
+        }
+    </style>
+    <!-- SheetJS Library for Excel Export -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+</head>
+<body>
+    <div class="main-layout">
+        <!-- LEFT SIDEBAR - FULL SCHEMA DOCUMENTATION -->
+        <aside class="sidebar">
+            <div class="sidebar-content">
+                <h1>📚 Database Schema Documentation</h1>
+
+                <!-- Overview Section -->
+                <div class="card">
+                    <h2>📊 Database Overview</h2>
+                    <p>
+                        The Macro Analytics database stores financial transaction data for analysis and reporting.
+                        The main table <strong>transactions</strong> contains detailed information about all bank
+                        transactions, including amounts, dates, account information, and categorization.
+                    </p>
+                    <div class="tip">
+                        <strong>💡 Tip:</strong> Use the natural language query interface to analyze this data.
+                        Just describe what you want to find in plain English!
+                    </div>
+                </div>
+
+                <!-- Table Structure -->
+                <div class="card">
+                    <h2>📋 Table: transactions</h2>
+                    <p>Main table containing all transaction records with their associated metadata.</p>
+
+                    <h3>All Columns</h3>
+                    <table class="schema-table">
+                        <thead>
+                            <tr>
+                                <th>Column Name</th>
+                                <th>Data Type</th>
+                                <th>Description</th>
+                                <th>Example Values</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="column-name">id</td>
+                                <td><span class="column-type">Integer</span> (PK)</td>
+                                <td>Unique identifier for each transaction record</td>
+                                <td>1, 2, 3...</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">work_order_id</td>
+                                <td><span class="column-type">String</span> (Indexed)</td>
+                                <td>Identifier for the work order associated with the transaction</td>
+                                <td>WO-12345, WO-67890</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">client_name</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Name of the client associated with the transaction</td>
+                                <td>ABC Corp, XYZ Ltd</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">date</td>
+                                <td><span class="column-type">DateTime</span></td>
+                                <td>Date and time when the transaction occurred</td>
+                                <td>2025-01-15 10:30:00</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">description</td>
+                                <td><span class="column-type">Text</span></td>
+                                <td>Detailed description of the transaction</td>
+                                <td>Payment received, Salary credit</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">amount</td>
+                                <td><span class="column-type">Float</span></td>
+                                <td>Transaction amount in currency units</td>
+                                <td>10000.50, 5000.00</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">type</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Transaction type: Credit (money in) or Debit (money out)</td>
+                                <td>Credit, Debit</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">balance</td>
+                                <td><span class="column-type">Float</span></td>
+                                <td>Account balance after this transaction</td>
+                                <td>50000.75, -1000.00</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">reference</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Reference number for the transaction (check number, reference code, etc.)</td>
+                                <td>CHQ-001, REF-12345</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">od_limit</td>
+                                <td><span class="column-type">Float</span></td>
+                                <td>Overdraft limit for the account</td>
+                                <td>5000.00, 10000.00</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">charges</td>
+                                <td><span class="column-type">Float</span></td>
+                                <td>Any charges or fees associated with the transaction</td>
+                                <td>50.00, 100.00</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">category</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Primary category for transaction classification</td>
+                                <td>Salary, Utilities, Transfer</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">category_2</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Secondary category for more detailed classification</td>
+                                <td>Direct Deposit, Monthly Bill</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">mode</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Transaction mode/method</td>
+                                <td>Check, NEFT, RTGS, Deposit</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">masked_account_number</td>
+                                <td><span class="column-type">String</span> (Indexed)</td>
+                                <td>Account number with sensitive digits masked for security</td>
+                                <td>XXXXX1234, XXXXXX5678</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">account_name</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Name on the bank account</td>
+                                <td>John Doe, Company ABC</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">account_type</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Type of bank account</td>
+                                <td>Savings, Current, Operating</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">bank_name</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Name of the bank</td>
+                                <td>HDFC Bank, ICICI Bank, State Bank</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">ifsc_code</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>IFSC code of the bank branch</td>
+                                <td>HDFC0001234, ICIC0000001</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">micr_code</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>MICR code of the bank branch</td>
+                                <td>110002345, 110003456</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">pincode</td>
+                                <td><span class="column-type">String</span></td>
+                                <td>Postal code of the account holder's address</td>
+                                <td>400001, 110001, 560001</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">entities</td>
+                                <td><span class="column-type">Text</span></td>
+                                <td>Renamed or extracted entities from transaction description</td>
+                                <td>Company names, Person names</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">created_at</td>
+                                <td><span class="column-type">DateTime</span></td>
+                                <td>Timestamp when the record was created in the database</td>
+                                <td>2025-01-15 10:30:00</td>
+                            </tr>
+                            <tr>
+                                <td class="column-name">updated_at</td>
+                                <td><span class="column-type">DateTime</span></td>
+                                <td>Timestamp when the record was last updated</td>
+                                <td>2025-01-15 10:30:00</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Column Categories -->
+                <div class="card">
+                    <h2>🏷️ Column Categories</h2>
+
+                    <h3>Transaction Details</h3>
+                    <div class="column-grid">
+                        <div class="column-card">
+                            <h4>amount</h4>
+                            <span class="type">Float</span>
+                            <p>The monetary value of the transaction. Use for filtering by amount or calculating totals.</p>
+                        </div>
+                        <div class="column-card">
+                            <h4>type</h4>
+                            <span class="type">String</span>
+                            <p>Credit or Debit. Use to filter money in/out transactions.</p>
+                        </div>
+                        <div class="column-card">
+                            <h4>date</h4>
+                            <span class="type">DateTime</span>
+                            <p>When the transaction happened. Use for date range queries.</p>
+                        </div>
+                    </div>
+
+                    <h3>Account Information</h3>
+                    <div class="column-grid">
+                        <div class="column-card">
+                            <h4>account_name</h4>
+                            <span class="type">String</span>
+                            <p>Name on the account. Search for specific account holders.</p>
+                        </div>
+                        <div class="column-card">
+                            <h4>account_type</h4>
+                            <span class="type">String</span>
+                            <p>Savings, Current, etc. Group transactions by account type.</p>
+                        </div>
+                        <div class="column-card">
+                            <h4>masked_account_number</h4>
+                            <span class="type">String</span>
+                            <p>Partially masked for security. Identifies the account.</p>
+                        </div>
+                    </div>
+
+                    <h3>Bank Details</h3>
+                    <div class="column-grid">
+                        <div class="column-card">
+                            <h4>bank_name</h4>
+                            <span class="type">String</span>
+                            <p>Which bank the account is with. Filter by bank.</p>
+                        </div>
+                        <div class="column-card">
+                            <h4>ifsc_code</h4>
+                            <span class="type">String</span>
+                            <p>Branch identification code. Helps identify bank locations.</p>
+                        </div>
+                        <div class="column-card">
+                            <h4>pincode</h4>
+                            <span class="type">String</span>
+                            <p>Account location zip code. Geographic filtering.</p>
+                        </div>
+                    </div>
+
+                    <h3>Categorization</h3>
+                    <div class="column-grid">
+                        <div class="column-card">
+                            <h4>category</h4>
+                            <span class="type">String</span>
+                            <p>Primary classification like Salary, Utilities, etc.</p>
+                        </div>
+                        <div class="column-card">
+                            <h4>category_2</h4>
+                            <span class="type">String</span>
+                            <p>Sub-category for detailed breakdown.</p>
+                        </div>
+                        <div class="column-card">
+                            <h4>mode</h4>
+                            <span class="type">String</span>
+                            <p>Transaction method: Check, NEFT, RTGS, etc.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Query Examples -->
+                <div class="card">
+                    <h2>💡 Query Examples</h2>
+                    <p>Here are some example natural language queries you can use:</p>
+
+                    <h3>Basic Queries</h3>
+                    <div class="example-section">
+                        <h4>Find all transactions from a specific date</h4>
+                        <div class="example-query">Show me all transactions from January 15, 2025</div>
+                    </div>
+
+                    <div class="example-section">
+                        <h4>Filter by amount range</h4>
+                        <div class="example-query">Show me all transactions with amount greater than 5000</div>
+                    </div>
+
+                    <div class="example-section">
+                        <h4>Filter by transaction type</h4>
+                        <div class="example-query">Show me all credit transactions in the last 30 days</div>
+                    </div>
+
+                    <h3>Account-Based Queries</h3>
+                    <div class="example-section">
+                        <h4>Find transactions for a specific account</h4>
+                        <div class="example-query">Show me all transactions for account holder John Doe</div>
+                    </div>
+
+                    <div class="example-section">
+                        <h4>Find accounts with negative balance</h4>
+                        <div class="example-query">List all transactions where balance is negative</div>
+                    </div>
+
+                    <h3>Category-Based Queries</h3>
+                    <div class="example-section">
+                        <h4>Group by category</h4>
+                        <div class="example-query">Show total amount by category in 2025</div>
+                    </div>
+
+                    <div class="example-section">
+                        <h4>Filter by bank</h4>
+                        <div class="example-query">Show all transactions from HDFC Bank</div>
+                    </div>
+
+                    <h3>Complex Queries</h3>
+                    <div class="example-section">
+                        <h4>Multiple filters</h4>
+                        <div class="example-query">Find all credit transactions above 10000 in category Salary from ICICI Bank</div>
+                    </div>
+
+                    <div class="example-section">
+                        <h4>Date ranges with filters</h4>
+                        <div class="example-query">Show debit transactions between January 1 and March 31, 2025 with amount greater than 1000</div>
+                    </div>
+                </div>
+
+                <!-- Tips and Best Practices -->
+                <div class="card">
+                    <h2>🎯 Tips for Better Queries</h2>
+
+                    <div class="tip">
+                        <strong>1. Be Specific with Dates</strong>
+                        Use clear date formats like "January 15, 2025" or "2025-01-15". You can also use relative dates like "last 30 days".
+                    </div>
+
+                    <div class="tip">
+                        <strong>2. Use Column Names in Queries</strong>
+                        While the AI can understand natural language, mentioning specific column names improves accuracy.
+                        For example: "Show transactions where category is 'Salary'" instead of "Show salary transactions".
+                    </div>
+
+                    <div class="tip">
+                        <strong>3. Specify Aggregations</strong>
+                        If you want totals or counts, be clear: "Total amount by category" or "Count of transactions".
+                    </div>
+
+                    <div class="tip">
+                        <strong>4. Know Your Data Values</strong>
+                        Common values:
+                        <ul style="margin-top: 10px; margin-left: 20px;">
+                            <li><strong>Type:</strong> Credit, Debit</li>
+                            <li><strong>Account Type:</strong> Savings, Current, Operating</li>
+                            <li><strong>Mode:</strong> Check, NEFT, RTGS, Deposit</li>
+                            <li><strong>Categories:</strong> Salary, Utilities, Transfer, etc.</li>
+                        </ul>
+                    </div>
+
+                    <div class="warning">
+                        <strong>⚠️ Note About Account Numbers</strong>
+                        Account numbers are masked for security. You cannot search by full account numbers, but you can still query by account_name or other attributes.
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- RIGHT SIDE - QUERY INTERFACE -->
+        <main class="main-content">
+            <header>
+                <h1>📊 Macro Analytics</h1>
+                <p>Query your transaction data using natural language</p>
+            </header>
+
+            <div class="main-card">
+                <div class="error" id="errorMsg"></div>
+                <div class="success-message" id="successMsg"></div>
+                <div class="query-info" id="queryInfo">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0;">Generated SQL Query:</h3>
+                        <button class="btn-copy" id="copySqlBtn" onclick="copySqlToClipboard()" style="display: none;">📋 Copy SQL</button>
+                    </div>
+                    <pre id="sqlQuery"></pre>
+                </div>
+
+                <div class="input-section">
+                    <label for="queryInput">Enter Your Query:</label>
+                    <textarea id="queryInput" placeholder="Example: Show me all transactions from January with amount greater than 1000"></textarea>
+                </div>
+
+                <div style="margin-bottom: 25px;">
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 10px; font-weight: 600;">📝 Example Queries:</p>
+                    <ul class="example-list">
+                        <li class="example-item" data-query="Show all transactions for client ABC with amount greater than 5000">Show all transactions for client ABC with amount greater than 5000</li>
+                        <li class="example-item" data-query="List transactions by category in the last 30 days">List transactions by category in the last 30 days</li>
+                        <li class="example-item" data-query="Find all credit transactions in 2025">Find all credit transactions in 2025</li>
+                        <li class="example-item" data-query="Show accounts with negative balance">Show accounts with negative balance</li>
+                        <li class="example-item" data-query="Get total amount by transaction type">Get total amount by transaction type</li>
+                    </ul>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" id="submitBtn" onclick="executeQuery()">Execute Query</button>
+                    <button class="btn-clear" onclick="clearResults()">Clear</button>
+                </div>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Processing your query...</p>
+                </div>
+
+                <div class="results-section" id="resultsSection">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 style="margin: 0;">Query Results</h2>
+                        <button class="btn-export" id="exportBtn" onclick="exportToExcel()" style="display: none;">📊 Export to Excel</button>
+                    </div>
+                    <div class="results-stats">
+                        <strong id="rowsCount">0</strong> rows returned
+                    </div>
+                    <div class="table-wrapper" id="tableWrapper">
+                        <!-- Table will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function executeQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+
+            if (!query) {
+                showError('Please enter a query');
+                return;
+            }
+
+            submitQuery(query);
+        }
+
+        async function submitQuery(query) {
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            hideError();
+            hideSuccess();
+
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `natural_query=${encodeURIComponent(query)}`
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showError(data.detail || 'Query execution failed');
+                    return;
+                }
+
+                displayResults(data);
+                showSuccess(`Query executed successfully! Retrieved ${data.rows_returned} rows.`);
+
+            } catch (error) {
+                showError(`Error: ${error.message}`);
+            } finally {
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+
+        function displayResults(data) {
+            document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('rowsCount').textContent = data.rows_returned;
+
+            document.getElementById('queryInfo').style.display = 'block';
+            document.getElementById('sqlQuery').textContent = data.sql;
+            document.getElementById('copySqlBtn').style.display = 'block';
+
+            const tableWrapper = document.getElementById('tableWrapper');
+            const exportBtn = document.getElementById('exportBtn');
+
+            if (!data.data || data.data.length === 0) {
+                tableWrapper.innerHTML = '<div class="no-data">No results found for this query.</div>';
+                exportBtn.style.display = 'none';
+                return;
+            }
+
+            const columns = Object.keys(data.data[0]);
+
+            let html = '<table>';
+            html += '<thead><tr>';
+            columns.forEach(col => {
+                html += `<th>${escapeHtml(col)}</th>`;
+            });
+            html += '</tr></thead>';
+            html += '<tbody>';
+
+            data.data.forEach(row => {
+                html += '<tr>';
+                columns.forEach(col => {
+                    const value = row[col] !== null && row[col] !== undefined ? row[col] : '-';
+                    html += `<td>${escapeHtml(String(value))}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            tableWrapper.innerHTML = html;
+
+            // Show export button when there are results
+            exportBtn.style.display = 'block';
+        }
+
+        function clearResults() {
+            document.getElementById('queryInput').value = '';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('queryInfo').style.display = 'none';
+            document.getElementById('exportBtn').style.display = 'none';
+            document.getElementById('copySqlBtn').style.display = 'none';
+            hideError();
+            hideSuccess();
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMsg');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMsg').style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMsg');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+        }
+
+        function hideSuccess() {
+            document.getElementById('successMsg').style.display = 'none';
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function setQuery(query) {
+            const textarea = document.getElementById('queryInput');
+            if (textarea) {
+                textarea.value = query;
+                textarea.focus();
+            }
+        }
+
+        function copySqlToClipboard() {
+            const sqlQuery = document.getElementById('sqlQuery').textContent;
+            if (!sqlQuery) {
+                showError('No SQL query to copy');
+                return;
+            }
+
+            navigator.clipboard.writeText(sqlQuery).then(() => {
+                const btn = document.getElementById('copySqlBtn');
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            }).catch(() => {
+                showError('Failed to copy SQL query');
+            });
+        }
+
+        function exportToExcel() {
+            const table = document.querySelector('table');
+            if (!table) {
+                showError('No data to export');
+                return;
+            }
+
+            try {
+                // Get table data
+                const rows = [];
+                const headerCells = table.querySelectorAll('thead th');
+                const headers = [];
+
+                headerCells.forEach(cell => {
+                    headers.push(cell.textContent.trim());
+                });
+                rows.push(headers);
+
+                const bodyCells = table.querySelectorAll('tbody tr');
+                bodyCells.forEach(row => {
+                    const rowData = [];
+                    row.querySelectorAll('td').forEach(cell => {
+                        rowData.push(cell.textContent.trim());
+                    });
+                    rows.push(rowData);
+                });
+
+                // Create Excel workbook
+                const ws = XLSX.utils.aoa_to_sheet(rows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Query Results');
+
+                // Auto-adjust column widths
+                const colWidths = [];
+                headers.forEach((header, idx) => {
+                    const maxWidth = Math.max(
+                        header.length,
+                        ...Array.from(bodyCells).map(row =>
+                            row.querySelectorAll('td')[idx].textContent.trim().length
+                        )
+                    );
+                    colWidths.push({ wch: Math.min(maxWidth + 2, 50) });
+                });
+                ws['!cols'] = colWidths;
+
+                // Generate filename with timestamp
+                const timestamp = new Date().toISOString().slice(0, 10);
+                const filename = `macro-analytics-results-${timestamp}.xlsx`;
+
+                // Download the file
+                XLSX.writeFile(wb, filename);
+                showSuccess(`✅ Data exported successfully as ${filename}`);
+            } catch (error) {
+                showError(`Export failed: ${error.message}`);
+            }
+        }
+
+        window.addEventListener('load', function() {
+            // Add event listeners to example items
+            document.querySelectorAll('.example-item').forEach(function(item) {
+                item.addEventListener('click', function() {
+                    const query = this.getAttribute('data-query');
+                    if (query) {
+                        setQuery(query);
+                    }
+                });
+            });
+
+            // Add keyboard shortcut listener
+            const queryInput = document.getElementById('queryInput');
+            if (queryInput) {
+                queryInput.addEventListener('keydown', function(e) {
+                    if (e.ctrlKey && e.key === 'Enter') {
+                        executeQuery();
+                    }
+                });
+            }
+
+            clearResults();
+            if (queryInput) {
+                queryInput.focus();
+            }
+        });
+    </script>
+</body>
+</html>
